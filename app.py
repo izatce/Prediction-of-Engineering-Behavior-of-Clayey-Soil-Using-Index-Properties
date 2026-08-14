@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-import os
 
 
 # ============================================================
@@ -22,94 +21,57 @@ st.set_page_config(
 
 st.title("🌱 Clayey Soil Engineering Properties Predictor")
 
-st.markdown(
-    """
-    ### Random Forest Based Prediction
-
-    Enter the soil index properties below to predict:
-
-    - CBR Unsoaked
-    - CBR Soaked
-    - OMC
-    - MDD
-    - Cohesion (C)
-    - Angle of Internal Friction (φ)
-    - UCS
-    """
-)
-
-
-# ============================================================
-# MODEL FILE
-# ============================================================
-
-MODEL_FILE = "Clayey_Soil_RF_Models.joblib"
-
-
-# ============================================================
-# CHECK MODEL
-# ============================================================
-
-if not os.path.exists(MODEL_FILE):
-
-    st.error(
-        "Model file not found. "
-        "Please upload Clayey_Soil_RF_Models.joblib "
-        "to the same GitHub repository as app.py."
-    )
-
-    st.stop()
-
-
-# ============================================================
-# LOAD MODEL
-# ============================================================
-
-@st.cache_resource
-def load_model():
-
-    return joblib.load(MODEL_FILE)
-
-
-try:
-
-    model_package = load_model()
-
-    models = model_package["models"]
-
-    input_features = model_package["inputs"]
-
-    output_features = model_package["outputs"]
-
-except Exception as e:
-
-    st.error(
-        f"Error loading model: {e}"
-    )
-
-    st.stop()
-
-
-# ============================================================
-# SIDEBAR
-# ============================================================
-
-st.sidebar.header("Soil Input Parameters")
-
-st.sidebar.markdown(
+st.write(
     "Enter the laboratory/index properties of the soil."
 )
 
 
 # ============================================================
-# INPUTS
+# LOAD TRAINED RANDOM FOREST MODELS
 # ============================================================
+
+MODEL_FILE = "Clayey_Soil_RF_Models.joblib"
+
+
+@st.cache_resource
+def load_models():
+
+    package = joblib.load(MODEL_FILE)
+
+    return package
+
+
+try:
+
+    package = load_models()
+
+    models = package["models"]
+
+    INPUTS = package["inputs"]
+
+    OUTPUTS = package["outputs"]
+
+except Exception as e:
+
+    st.error(
+        f"Unable to load the trained model: {e}"
+    )
+
+    st.stop()
+
+
+# ============================================================
+# SIDEBAR INPUTS
+# ============================================================
+
+st.sidebar.header("Soil Input Properties")
+
 
 LL = st.sidebar.number_input(
     "Liquid Limit, LL (%)",
     min_value=0.0,
     max_value=200.0,
-    value=52.0,
+    value=50.0,
     step=0.1
 )
 
@@ -117,8 +79,8 @@ LL = st.sidebar.number_input(
 PL = st.sidebar.number_input(
     "Plastic Limit, PL (%)",
     min_value=0.0,
-    max_value=150.0,
-    value=28.0,
+    max_value=200.0,
+    value=25.0,
     step=0.1
 )
 
@@ -126,8 +88,8 @@ PL = st.sidebar.number_input(
 PI = st.sidebar.number_input(
     "Plasticity Index, PI (%)",
     min_value=0.0,
-    max_value=150.0,
-    value=24.0,
+    max_value=200.0,
+    value=25.0,
     step=0.1
 )
 
@@ -145,16 +107,41 @@ Gs = st.sidebar.number_input(
     "Specific Gravity, Gs",
     min_value=1.0,
     max_value=4.0,
-    value=2.68,
+    value=2.67,
     step=0.01
 )
 
 
 # ============================================================
-# INPUT TABLE
+# INPUT DATAFRAME
 # ============================================================
 
-input_data = pd.DataFrame({
+input_values = {
+
+    "LL (%)": LL,
+
+    "PL (%)": PL,
+
+    "PI (%)": PI,
+
+    "w (%)": w,
+
+    "Gs (-)": Gs
+}
+
+
+X = pd.DataFrame(
+    [input_values]
+)
+
+
+# ============================================================
+# DISPLAY INPUT PROPERTIES
+# ============================================================
+
+st.subheader("Input Soil Properties")
+
+display_df = pd.DataFrame({
 
     "LL": [LL],
 
@@ -168,11 +155,8 @@ input_data = pd.DataFrame({
 
 })
 
-
-st.subheader("Input Soil Properties")
-
 st.dataframe(
-    input_data,
+    display_df,
     use_container_width=True,
     hide_index=True
 )
@@ -182,37 +166,48 @@ st.dataframe(
 # PREDICTION BUTTON
 # ============================================================
 
-predict_button = st.button(
+if st.button(
     "🔮 Predict Engineering Properties",
-    type="primary",
     use_container_width=True
-)
-
-
-# ============================================================
-# PREDICTION
-# ============================================================
-
-if predict_button:
+):
 
     try:
 
+        # ----------------------------------------------------
+        # Ensure exact feature order used during training
+        # ----------------------------------------------------
+
+        X_model = X[INPUTS]
+
+
+        # ----------------------------------------------------
+        # Predictions
+        # ----------------------------------------------------
+
         predictions = {}
 
-        for output in output_features:
 
-            model = models[output]
+        for target in OUTPUTS:
+
+            model = models[target]
 
             prediction = model.predict(
-                input_data[input_features]
+                X_model
             )[0]
 
-            predictions[output] = prediction
+            predictions[target] = float(
+                prediction
+            )
 
 
-        # ----------------------------------------------------
-        # RESULTS
-        # ----------------------------------------------------
+        # ====================================================
+        # DISPLAY RESULTS
+        # ====================================================
+
+        st.success(
+            "Prediction completed successfully!"
+        )
+
 
         st.subheader(
             "🎯 Predicted Engineering Properties"
@@ -223,77 +218,53 @@ if predict_button:
 
 
         # ----------------------------------------------------
-        # CBR UNSOAKED
+        # CBR
         # ----------------------------------------------------
 
         with col1:
 
             st.metric(
                 "CBR Unsoaked (%)",
-                f"{predictions['CBR_Unsoaked']:.2f}"
+                f"{predictions['CBR_unsoaked (%)']:.2f}"
+            )
+
+            st.metric(
+                "CBR Soaked (%)",
+                f"{predictions['CBR_soaked (%)']:.2f}"
             )
 
 
         # ----------------------------------------------------
-        # CBR SOAKED
+        # COMPACTION
         # ----------------------------------------------------
 
         with col2:
 
             st.metric(
-                "CBR Soaked (%)",
-                f"{predictions['CBR_Soaked']:.2f}"
+                "OMC (%)",
+                f"{predictions['OMC (%)']:.2f}"
+            )
+
+            st.metric(
+                "MDD (kg/m³)",
+                f"{predictions['MDD (kg/m³)']:.2f}"
             )
 
 
         # ----------------------------------------------------
-        # OMC
+        # SHEAR STRENGTH
         # ----------------------------------------------------
 
         with col3:
 
             st.metric(
-                "OMC (%)",
-                f"{predictions['OMC']:.2f}"
+                "Cohesion, c (kPa)",
+                f"{predictions['c (kPa)']:.2f}"
             )
-
-
-        col4, col5, col6, col7 = st.columns(4)
-
-
-        # ----------------------------------------------------
-        # MDD
-        # ----------------------------------------------------
-
-        with col4:
-
-            st.metric(
-                "MDD (kg/m³)",
-                f"{predictions['MDD']:.2f}"
-            )
-
-
-        # ----------------------------------------------------
-        # COHESION
-        # ----------------------------------------------------
-
-        with col5:
-
-            st.metric(
-                "Cohesion C (kPa)",
-                f"{predictions['C']:.2f}"
-            )
-
-
-        # ----------------------------------------------------
-        # PHI
-        # ----------------------------------------------------
-
-        with col6:
 
             st.metric(
                 "Phi (°)",
-                f"{predictions['Phi']:.2f}"
+                f"{predictions['phi (deg)']:.2f}"
             )
 
 
@@ -301,24 +272,17 @@ if predict_button:
         # UCS
         # ----------------------------------------------------
 
-        with col7:
-
-            st.metric(
-                "UCS (kPa)",
-                f"{predictions['UCS']:.2f}"
-            )
+        st.metric(
+            "UCS (kPa)",
+            f"{predictions['UCS (kPa)']:.2f}"
+        )
 
 
         # ====================================================
         # RESULTS TABLE
         # ====================================================
 
-        st.subheader(
-            "📊 Prediction Summary"
-        )
-
-
-        results = pd.DataFrame({
+        results_table = pd.DataFrame({
 
             "Engineering Property": [
 
@@ -330,7 +294,7 @@ if predict_button:
 
                 "MDD",
 
-                "Cohesion",
+                "Cohesion (c)",
 
                 "Phi",
 
@@ -340,19 +304,19 @@ if predict_button:
 
             "Predicted Value": [
 
-                predictions["CBR_Unsoaked"],
+                predictions["CBR_unsoaked (%)"],
 
-                predictions["CBR_Soaked"],
+                predictions["CBR_soaked (%)"],
 
-                predictions["OMC"],
+                predictions["OMC (%)"],
 
-                predictions["MDD"],
+                predictions["MDD (kg/m³)"],
 
-                predictions["C"],
+                predictions["c (kPa)"],
 
-                predictions["Phi"],
+                predictions["phi (deg)"],
 
-                predictions["UCS"]
+                predictions["UCS (kPa)"]
 
             ],
 
@@ -377,43 +341,15 @@ if predict_button:
         })
 
 
+        st.subheader(
+            "📊 Prediction Summary"
+        )
+
+
         st.dataframe(
-
-            results.style.format({
-
-                "Predicted Value":
-                    "{:.3f}"
-
-            }),
-
+            results_table,
             use_container_width=True,
-
             hide_index=True
-
-        )
-
-
-        # ====================================================
-        # DOWNLOAD RESULTS
-        # ====================================================
-
-        csv_data = results.to_csv(
-            index=False
-        )
-
-
-        st.download_button(
-
-            label="⬇️ Download Prediction Results",
-
-            data=csv_data,
-
-            file_name="soil_prediction_results.csv",
-
-            mime="text/csv",
-
-            use_container_width=True
-
         )
 
 
@@ -425,27 +361,32 @@ if predict_button:
 
 
 # ============================================================
-# INFORMATION
+# MODEL INFORMATION
 # ============================================================
 
-st.markdown("---")
+st.divider()
 
-st.subheader("ℹ️ Model Information")
-
-st.write(
-    "Model: Random Forest Regressor"
+st.subheader(
+    "ℹ️ Model Information"
 )
 
 st.write(
-    "Input variables: LL, PL, PI, Natural Water Content and Gs"
+    "The application uses Random Forest regression models "
+    "trained using clayey-soil index properties."
 )
 
 st.write(
-    "Predicted outputs: CBR, OMC, MDD, C, Phi and UCS"
+    "**Input variables:**"
 )
 
-st.caption(
-    "This application provides model-based predictions and "
-    "should be used together with appropriate laboratory "
-    "testing and engineering judgment."
+st.write(
+    ", ".join(INPUTS)
+)
+
+st.write(
+    "**Predicted engineering properties:**"
+)
+
+st.write(
+    ", ".join(OUTPUTS)
 )
