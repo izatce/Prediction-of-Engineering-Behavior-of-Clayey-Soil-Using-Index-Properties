@@ -2,8 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-import shap
-import matplotlib.pyplot as plt
 
 
 # ============================================================
@@ -24,18 +22,12 @@ st.set_page_config(
 st.title("🌱 Clayey Soil Engineering Properties Predictor")
 
 st.write(
-    "Random Forest-based prediction with Explainable AI (SHAP)"
-)
-
-st.info(
-    "Enter the laboratory/index properties of the soil "
-    "to predict engineering properties and interpret the "
-    "model prediction using SHAP."
+    "Enter the laboratory/index properties of the soil."
 )
 
 
 # ============================================================
-# LOAD TRAINED MODEL
+# LOAD TRAINED RANDOM FOREST MODELS
 # ============================================================
 
 MODEL_FILE = "Clayey_Soil_RF_Models.joblib"
@@ -69,10 +61,10 @@ except Exception as e:
 
 
 # ============================================================
-# SIDEBAR
+# SIDEBAR INPUTS
 # ============================================================
 
-st.sidebar.header("🧪 Soil Input Properties")
+st.sidebar.header("Soil Input Properties")
 
 
 LL = st.sidebar.number_input(
@@ -121,7 +113,7 @@ Gs = st.sidebar.number_input(
 
 
 # ============================================================
-# CREATE INPUT DATAFRAME
+# INPUT DATAFRAME
 # ============================================================
 
 input_values = {
@@ -135,7 +127,6 @@ input_values = {
     "w (%)": w,
 
     "Gs (-)": Gs
-
 }
 
 
@@ -144,33 +135,25 @@ X = pd.DataFrame(
 )
 
 
-# Make absolutely sure the order is the same
-# as used during Random Forest training
-
-X_model = X[INPUTS]
-
-
 # ============================================================
-# DISPLAY INPUTS
+# DISPLAY INPUT PROPERTIES
 # ============================================================
 
-st.subheader("📋 Input Soil Properties")
-
+st.subheader("Input Soil Properties")
 
 display_df = pd.DataFrame({
 
-    "LL (%)": [LL],
+    "LL": [LL],
 
-    "PL (%)": [PL],
+    "PL": [PL],
 
-    "PI (%)": [PI],
+    "PI": [PI],
 
-    "w (%)": [w],
+    "w": [w],
 
     "Gs": [Gs]
 
 })
-
 
 st.dataframe(
     display_df,
@@ -180,7 +163,7 @@ st.dataframe(
 
 
 # ============================================================
-# PREDICTION
+# PREDICTION BUTTON
 # ============================================================
 
 if st.button(
@@ -190,12 +173,19 @@ if st.button(
 
     try:
 
+        # ----------------------------------------------------
+        # Ensure exact feature order used during training
+        # ----------------------------------------------------
+
+        X_model = X[INPUTS]
+
+
+        # ----------------------------------------------------
+        # Predictions
+        # ----------------------------------------------------
+
         predictions = {}
 
-
-        # ====================================================
-        # MAKE PREDICTIONS
-        # ====================================================
 
         for target in OUTPUTS:
 
@@ -211,17 +201,13 @@ if st.button(
 
 
         # ====================================================
-        # SUCCESS
+        # DISPLAY RESULTS
         # ====================================================
 
         st.success(
             "Prediction completed successfully!"
         )
 
-
-        # ====================================================
-        # PREDICTION RESULTS
-        # ====================================================
 
         st.subheader(
             "🎯 Predicted Engineering Properties"
@@ -230,6 +216,10 @@ if st.button(
 
         col1, col2, col3 = st.columns(3)
 
+
+        # ----------------------------------------------------
+        # CBR
+        # ----------------------------------------------------
 
         with col1:
 
@@ -244,6 +234,10 @@ if st.button(
             )
 
 
+        # ----------------------------------------------------
+        # COMPACTION
+        # ----------------------------------------------------
+
         with col2:
 
             st.metric(
@@ -256,6 +250,10 @@ if st.button(
                 f"{predictions['MDD (kg/m³)']:.2f}"
             )
 
+
+        # ----------------------------------------------------
+        # SHEAR STRENGTH
+        # ----------------------------------------------------
 
         with col3:
 
@@ -270,6 +268,10 @@ if st.button(
             )
 
 
+        # ----------------------------------------------------
+        # UCS
+        # ----------------------------------------------------
+
         st.metric(
             "UCS (kPa)",
             f"{predictions['UCS (kPa)']:.2f}"
@@ -279,11 +281,6 @@ if st.button(
         # ====================================================
         # RESULTS TABLE
         # ====================================================
-
-        st.subheader(
-            "📊 Prediction Summary"
-        )
-
 
         results_table = pd.DataFrame({
 
@@ -344,268 +341,15 @@ if st.button(
         })
 
 
+        st.subheader(
+            "📊 Prediction Summary"
+        )
+
+
         st.dataframe(
             results_table,
             use_container_width=True,
             hide_index=True
-        )
-
-
-        # ====================================================
-        # SHAP INTERPRETATION
-        # ====================================================
-
-        st.divider()
-
-        st.header(
-            "🔍 Explainable AI — SHAP Interpretation"
-        )
-
-
-        st.write(
-            "SHAP (SHapley Additive exPlanations) explains "
-            "how each input soil property contributes to "
-            "the prediction of each engineering property."
-        )
-
-
-        st.info(
-            "Positive SHAP contribution pushes the prediction "
-            "higher, while negative SHAP contribution pushes "
-            "the prediction lower relative to the model's "
-            "baseline prediction."
-        )
-
-
-        # ====================================================
-        # SHAP FOR EACH OUTPUT
-        # ====================================================
-
-        for target in OUTPUTS:
-
-            st.subheader(
-                f"🔬 SHAP Explanation: {target}"
-            )
-
-
-            model = models[target]
-
-
-            try:
-
-                # ------------------------------------------------
-                # TreeExplainer for Random Forest
-                # ------------------------------------------------
-
-                explainer = shap.TreeExplainer(
-                    model
-                )
-
-
-                shap_values = explainer.shap_values(
-                    X_model
-                )
-
-
-                # ------------------------------------------------
-                # Handle different SHAP output formats
-                # ------------------------------------------------
-
-                if isinstance(
-                    shap_values,
-                    list
-                ):
-
-                    shap_values_array = np.array(
-                        shap_values[0]
-                    )
-
-                else:
-
-                    shap_values_array = np.array(
-                        shap_values
-                    )
-
-
-                shap_values_array = (
-                    shap_values_array.reshape(-1)
-                )
-
-
-                # ------------------------------------------------
-                # SHAP dataframe
-                # ------------------------------------------------
-
-                shap_df = pd.DataFrame({
-
-                    "Feature": INPUTS,
-
-                    "SHAP Value":
-                        shap_values_array,
-
-                    "Absolute SHAP":
-                        np.abs(
-                            shap_values_array
-                        )
-
-                })
-
-
-                shap_df = shap_df.sort_values(
-                    "Absolute SHAP",
-                    ascending=False
-                )
-
-
-                # ------------------------------------------------
-                # Display SHAP table
-                # ------------------------------------------------
-
-                st.dataframe(
-
-                    shap_df[
-                        [
-                            "Feature",
-                            "SHAP Value"
-                        ]
-                    ],
-
-                    use_container_width=True,
-
-                    hide_index=True
-                )
-
-
-                # ------------------------------------------------
-                # SHAP BAR CHART
-                # ------------------------------------------------
-
-                chart_df = shap_df.sort_values(
-                    "SHAP Value"
-                )
-
-
-                fig, ax = plt.subplots(
-                    figsize=(8, 4.5)
-                )
-
-
-                ax.barh(
-
-                    chart_df["Feature"],
-
-                    chart_df["SHAP Value"]
-                )
-
-
-                ax.axvline(
-                    0,
-                    linestyle="--"
-                )
-
-
-                ax.set_xlabel(
-                    "SHAP Value"
-                )
-
-
-                ax.set_ylabel(
-                    "Input Soil Property"
-                )
-
-
-                ax.set_title(
-                    f"Feature Contribution to {target}"
-                )
-
-
-                plt.tight_layout()
-
-
-                st.pyplot(
-                    fig
-                )
-
-
-                plt.close(fig)
-
-
-                # ------------------------------------------------
-                # Most influential feature
-                # ------------------------------------------------
-
-                most_important = shap_df.iloc[0]
-
-                feature_name = (
-                    most_important["Feature"]
-                )
-
-                shap_value = (
-                    most_important["SHAP Value"]
-                )
-
-
-                if shap_value > 0:
-
-                    interpretation = (
-                        f"**{feature_name}** has the strongest "
-                        f"influence for this prediction and "
-                        f"pushes the model prediction upward "
-                        f"(SHAP = {shap_value:.4f})."
-                    )
-
-                elif shap_value < 0:
-
-                    interpretation = (
-                        f"**{feature_name}** has the strongest "
-                        f"influence for this prediction and "
-                        f"pushes the model prediction downward "
-                        f"(SHAP = {shap_value:.4f})."
-                    )
-
-                else:
-
-                    interpretation = (
-                        f"**{feature_name}** has the strongest "
-                        f"influence, although its SHAP "
-                        f"contribution is approximately zero."
-                    )
-
-
-                st.write(
-                    interpretation
-                )
-
-
-            except Exception as shap_error:
-
-                st.warning(
-                    f"SHAP interpretation could not be "
-                    f"generated for {target}: {shap_error}"
-                )
-
-
-        # ====================================================
-        # XAI CONCLUSION
-        # ====================================================
-
-        st.divider()
-
-        st.subheader(
-            "📌 XAI Interpretation"
-        )
-
-        st.write(
-            "The SHAP analysis identifies the relative "
-            "contribution of LL, PL, PI, natural water "
-            "content, and specific gravity to each predicted "
-            "engineering property."
-        )
-
-        st.write(
-            "This provides an interpretable view of the "
-            "Random Forest model rather than relying only "
-            "on prediction accuracy."
         )
 
 
@@ -645,8 +389,4 @@ st.write(
 
 st.write(
     ", ".join(OUTPUTS)
-)
-
-st.write(
-    "**Explainable AI:** SHAP-based local feature contribution"
 )
